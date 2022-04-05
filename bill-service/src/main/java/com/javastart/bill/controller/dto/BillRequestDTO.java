@@ -14,7 +14,5 @@ public class BillRequestDTO {
 
     private Boolean isDefault;
 
-    private OffsetDateTime creationDate;
-
     private Boolean overdraftEnabled;
 }

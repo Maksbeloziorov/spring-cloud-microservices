@@ -20,9 +20,6 @@ public class BillResponseDTO {
 
     private Boolean isDefault;
 
-
-
-
     private Boolean overdraftEnabled;
 
     public BillResponseDTO(Bill bill) {
@@ -30,7 +27,6 @@ public class BillResponseDTO {
         accountId = bill.getAccountId();
         amount = bill.getAmount();
         isDefault = bill.getIsDefault();
-        creationDate = bill.getCreationDate();
         overdraftEnabled = bill.getOverdraftEnabled();
     }
 }
