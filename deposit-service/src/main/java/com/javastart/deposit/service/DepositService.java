@@ -1,6 +1,8 @@
 package com.javastart.deposit.service;
 
-import com.javastart.deposit.dto.DepositResponseDTO;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javastart.deposit.controller.dto.DepositResponseDTO;
 import com.javastart.deposit.entity.Deposit;
 import com.javastart.deposit.exception.DepositServiceException;
 import com.javastart.deposit.repository.DepositRepository;
@@ -16,7 +18,6 @@ import java.time.OffsetDateTime;
 public class DepositService {
 
     private static final String TOPIC_EXCHANGE_DEPOSIT = "js.deposit.notify.exchange";
-
     private static final String ROUTING_KEY_DEPOSIT = "js.key.deposit";
 
     private final DepositRepository depositRepository;
@@ -43,23 +44,51 @@ public class DepositService {
 
         if (billId != null) {
             BillResponseDTO billResponseDTO = billServiceClient.getBillById(billId);
-            BillRequestDTO billRequestDTO = new BillRequestDTO();
-            billRequestDTO.setAccountId(billResponseDTO.getAccountId());
-            billRequestDTO.setCreationDate(billRequestDTO.getCreationDate());
-            billRequestDTO.setIsDefault(billResponseDTO.getIsDefault());
-            billRequestDTO.setOverdraftEnabled(billResponseDTO.getOverdraftEnabled());
-            billRequestDTO.setAmount(billRequestDTO.getAmount().add(amount));
+            BillRequestDTO billRequestDTO = createBillRequest(amount, billResponseDTO);
 
             billServiceClient.update(billId, billRequestDTO);
 
             AccountResponseDTO accountResponseDTO = accountServiceClient.getAccountById(billResponseDTO.getAccountId());
             depositRepository.save(new Deposit(amount, billId, OffsetDateTime.now(), accountResponseDTO.getEmail()));
 
-            DepositResponseDTO depositResponseDTO = new DepositResponseDTO(amount, accountResponseDTO.getEmail());
-
-            rabbitTemplate.convertAndSend();
+            return createResponse(amount, accountResponseDTO);
         }
+        BillResponseDTO defaultBill = getDefaultBill(accountId);
+        BillRequestDTO billRequestDTO = createBillRequest(amount, defaultBill);
+        billServiceClient.update(defaultBill.getBillId(), billRequestDTO);
+        AccountResponseDTO account = accountServiceClient.getAccountById(accountId);
+        depositRepository.save(new Deposit(amount, defaultBill.getBillId(), OffsetDateTime.now(), account.getEmail()));
+        return createResponse(amount, account);
     }
 
+    private DepositResponseDTO createResponse(BigDecimal amount, AccountResponseDTO accountResponseDTO) {
+        DepositResponseDTO depositResponseDTO = new DepositResponseDTO(amount, accountResponseDTO.getEmail());
 
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            rabbitTemplate.convertAndSend(TOPIC_EXCHANGE_DEPOSIT, ROUTING_KEY_DEPOSIT,
+                    objectMapper.writeValueAsString(depositResponseDTO));
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+            throw new DepositServiceException("Can't send message to RabbitMQ");
+        }
+        return depositResponseDTO;
+    }
+
+    private BillRequestDTO createBillRequest(BigDecimal amount, BillResponseDTO billResponseDTO) {
+        BillRequestDTO billRequestDTO = new BillRequestDTO();
+        billRequestDTO.setAccountId(billResponseDTO.getAccountId());
+        billRequestDTO.setCreationDate(billResponseDTO.getCreationDate());
+        billRequestDTO.setIsDefault(billResponseDTO.getIsDefault());
+        billRequestDTO.setOverdraftEnabled(billResponseDTO.getOverdraftEnabled());
+        billRequestDTO.setAmount(billResponseDTO.getAmount().add(amount));
+        return billRequestDTO;
+    }
+
+    private BillResponseDTO getDefaultBill(Long accountId) {
+        return billServiceClient.getBillsByAccountId(accountId).stream()
+                .filter(BillResponseDTO::getIsDefault)
+                .findAny()
+                .orElseThrow(() -> new DepositServiceException("Unable to find default bill for account: " + accountId));
+    }
 }

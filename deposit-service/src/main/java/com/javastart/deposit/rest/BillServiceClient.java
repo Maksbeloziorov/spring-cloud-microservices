@@ -18,5 +18,5 @@ public interface BillServiceClient {
     void update(@PathVariable("billId") Long billId, BillRequestDTO billRequestDTO);
 
     @RequestMapping(value = "bills/account/{accountId}", method = RequestMethod.GET)
-    List<BillResponseDTO> getBillsByAccountId();
+    List<BillResponseDTO> getBillsByAccountId(@PathVariable("accountId") Long account);
 }

@@ -1,4 +1,4 @@
-package com.javastart.deposit.dto;
+package com.javastart.deposit.controller.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
